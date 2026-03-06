@@ -1,0 +1,52 @@
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.aex
+*.o
+*.obj
+*.pyc
+
+# IDEs and Editors
+.idea/
+.settings/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Python environment
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/*.wav
+
+# Large files and models
+*.zip
+*.tar.gz
+*.rar
+*.pkl
+*.h5
+*.pt
+model/
+dataset/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Gradle and Build directories
+mobile_app/.gradle/
+mobile_app/build/
+mobile_app/app/build/
+mobile_app/captures/
+mobile_app/app/release/
+mobile_app/app/debug/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+cmdline-tools.zip

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.KavachAI" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/kavach_accent</item>
+        <item name="colorPrimaryVariant">@color/kavach_accent</item>
+        <item name="colorOnPrimary">@color/kavach_text</item>
+        <item name="colorSecondary">@color/kavach_accent</item>
+        <item name="colorSecondaryVariant">@color/kavach_accent</item>
+        <item name="colorOnSecondary">@color/kavach_text</item>
+        <item name="colorSurface">@color/kavach_card</item>
+        <item name="colorOnSurface">@color/kavach_text</item>
+        <item name="android:statusBarColor">@color/kavach_bg</item>
+        <item name="android:navigationBarColor">@color/kavach_bg</item>
+        <item name="android:windowBackground">@color/kavach_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="TextAppearance.Kavach.Heading" parent="TextAppearance.MaterialComponents.Headline5">
+        <item name="android:textColor">@color/kavach_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="TextAppearance.Kavach.Body" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:textColor">@color/kavach_muted</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.Kavach.Mono" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:textColor">@color/kavach_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+
+    <style name="Widget.Kavach.PrimaryButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textStyle">bold</item>
+        <item name="cornerRadius">28dp</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="backgroundTint">@color/kavach_accent</item>
+        <item name="android:textColor">@color/kavach_text</item>
+    </style>
+
+    <style name="Widget.Kavach.SecondaryButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textStyle">bold</item>
+        <item name="cornerRadius">28dp</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="strokeColor">@color/kavach_border</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">@color/kavach_text</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+    </style>
+</resources>

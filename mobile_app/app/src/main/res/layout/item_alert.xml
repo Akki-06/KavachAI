@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="6dp"
+    app:cardBackgroundColor="@color/kavach_card"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/kavach_border"
+    app:strokeWidth="1dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="98dp"
+        android:padding="14dp">
+
+        <View
+            android:id="@+id/view_risk_strip"
+            android:layout_width="4dp"
+            android:layout_height="0dp"
+            android:background="@color/kavach_scam"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tv_alert_level"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:background="@drawable/bg_chip"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="SCAM"
+            android:textColor="@color/kavach_scam"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toEndOf="@+id/view_risk_strip"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tv_alert_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Just now"
+            android:textColor="@color/kavach_muted"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@+id/tv_alert_level"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/tv_alert_level" />
+
+        <TextView
+            android:id="@+id/tv_transcript"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:ellipsize="end"
+            android:maxLines="3"
+            android:text="Transcript will appear here..."
+            android:textColor="@color/kavach_text"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@+id/tv_alert_level"
+            app:layout_constraintTop_toBottomOf="@+id/tv_alert_level" />
+
+        <TextView
+            android:id="@+id/tv_keywords"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="Keywords: otp, block"
+            android:textColor="@color/kavach_muted"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/tv_risk_score"
+            app:layout_constraintStart_toStartOf="@+id/tv_alert_level"
+            app:layout_constraintTop_toBottomOf="@+id/tv_transcript" />
+
+        <TextView
+            android:id="@+id/tv_risk_score"
+            style="@style/TextAppearance.Kavach.Mono"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="10/10"
+            android:textColor="@color/kavach_scam"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="@+id/tv_keywords"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>
