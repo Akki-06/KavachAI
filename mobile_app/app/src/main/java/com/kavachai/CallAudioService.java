@@ -17,6 +17,7 @@ import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.IBinder;
+import android.telecom.TelecomManager;
 import android.util.Base64;
 import android.util.Log;
 
@@ -50,12 +51,12 @@ public class CallAudioService extends Service {
     private static final String TAG = "CallAudioService";
     private static final int NOTIFICATION_ID = 101;
     private static final int SCAM_ALERT_ID = 102;
+    private static final int SUSPICIOUS_ALERT_ID = 103;
     private static final String CHANNEL_ID = "kavachai_active_call";
     private static final String ALERT_CHANNEL_ID = "kavachai_alerts";
+    private static final String WARNING_CHANNEL_ID = "kavachai_warnings";
 
     private static final int SAMPLE_RATE = 16000;
-    private static final int CHUNK_SIZE_MS = 500;
-    private static final int BUFFER_SIZE = SAMPLE_RATE * 2 * (CHUNK_SIZE_MS / 1000);
 
     private AudioRecord audioRecord;
     private boolean isRecording = false;
@@ -65,11 +66,12 @@ public class CallAudioService extends Service {
     private WebSocket webSocket;
     private long sessionStartMs = 0L;
     private boolean scamAlertSent = false;
+    private boolean suspiciousAlertSent = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannel();
+        createNotificationChannels();
         client = new OkHttpClient();
     }
 
@@ -83,6 +85,7 @@ public class CallAudioService extends Service {
         if ("START_CAPTURE".equals(action)) {
             sessionStartMs = System.currentTimeMillis();
             scamAlertSent = false;
+            suspiciousAlertSent = false;
             startForeground(NOTIFICATION_ID, buildActiveNotification());
             startAudioCaptureAndStreaming();
             incrementCallsMonitored();
@@ -104,16 +107,10 @@ public class CallAudioService extends Service {
             return;
         }
 
-        // Android 10+ blocks direct call audio capture for regular apps.
-        // Workaround: force speakerphone ON so caller audio plays through speaker,
-        // then use VOICE_RECOGNITION (microphone) to pick it up acoustically.
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (audioManager != null) {
-            // Use MODE_IN_CALL to correctly route audio
             audioManager.setMode(AudioManager.MODE_IN_CALL);
-            // Force speakerphone on all API levels
             audioManager.setSpeakerphoneOn(true);
-            // Also try the new setCommunicationDevice API on Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
                     if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
@@ -125,32 +122,34 @@ public class CallAudioService extends Service {
             Log.d(TAG, "Speakerphone forced ON, mode=MODE_IN_CALL");
         }
 
-        String websocketUrl = BuildConfig.BACKEND_WS_URL;
+        // Read backend URL from SharedPreferences, fall back to BuildConfig
+        SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
+        String websocketUrl = prefs.getString("backend_ws_url", null);
+        if (websocketUrl == null || websocketUrl.trim().isEmpty()) {
+            websocketUrl = BuildConfig.BACKEND_WS_URL;
+        }
         if (websocketUrl == null || websocketUrl.trim().isEmpty()) {
             websocketUrl = "ws://127.0.0.1:8765";
         }
 
+        Log.d(TAG, "Connecting to backend: " + websocketUrl);
         Request request = new Request.Builder().url(websocketUrl).build();
         webSocket = client.newWebSocket(request, new KavachWebSocketListener());
 
-        // Wait 800ms for speakerphone routing to fully settle before starting
-        // AudioRecord
+        // Wait 800ms for speakerphone routing to settle before starting AudioRecord
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
                 this::initAndStartRecording, 800);
     }
 
     @SuppressWarnings("MissingPermission")
     private void initAndStartRecording() {
-        // Chunk size: 250ms of audio at 16kHz mono 16-bit = 8000 bytes
-        final int CHUNK_BYTES = SAMPLE_RATE / 4 * 2; // 250ms
+        final int CHUNK_BYTES = SAMPLE_RATE / 4 * 2; // 250ms at 16kHz mono 16-bit
         int minBufferSize = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT);
         int bufferSize = Math.max(minBufferSize, CHUNK_BYTES * 2);
 
-        // VOICE_RECOGNITION: captures raw microphone input (picks up speaker
-        // acoustically)
         try {
             audioRecord = new AudioRecord(
                     MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -170,7 +169,7 @@ public class CallAudioService extends Service {
             return;
         }
 
-        Log.d(TAG, "AudioRecord started with VOICE_RECOGNITION @ " + SAMPLE_RATE + "Hz");
+        Log.d(TAG, "AudioRecord started @ " + SAMPLE_RATE + "Hz");
         audioRecord.startRecording();
         isRecording = true;
 
@@ -182,7 +181,6 @@ public class CallAudioService extends Service {
                 if (bytesRead <= 0 || webSocket == null) {
                     continue;
                 }
-                // Send all audio — let Sarvam's VAD decide what's speech
                 try {
                     String base64Audio = Base64.encodeToString(audioBuffer, 0, bytesRead, Base64.NO_WRAP);
                     JSONObject payload = new JSONObject();
@@ -208,10 +206,7 @@ public class CallAudioService extends Service {
         }
 
         if (audioRecord != null) {
-            try {
-                audioRecord.stop();
-            } catch (IllegalStateException ignored) {
-            }
+            try { audioRecord.stop(); } catch (IllegalStateException ignored) {}
             audioRecord.release();
             audioRecord = null;
         }
@@ -231,6 +226,22 @@ public class CallAudioService extends Service {
         }
     }
 
+    /** End the active call using TelecomManager (API 28+ / ANSWER_PHONE_CALLS permission). */
+    private void endActiveCall() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS)
+                    == PackageManager.PERMISSION_GRANTED) {
+                TelecomManager tm = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+                if (tm != null) {
+                    tm.endCall();
+                    Log.d(TAG, "Call terminated via TelecomManager.");
+                    return;
+                }
+            }
+        }
+        Log.w(TAG, "Cannot auto-end call: ANSWER_PHONE_CALLS permission missing or API < 28");
+    }
+
     private void incrementCallsMonitored() {
         SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
         int count = prefs.getInt("total_calls_monitored", 0);
@@ -240,10 +251,7 @@ public class CallAudioService extends Service {
     private Notification buildActiveNotification() {
         Intent notificationIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
-                this,
-                0,
-                notificationIntent,
-                PendingIntent.FLAG_IMMUTABLE);
+                this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("KavachAI Active")
@@ -254,45 +262,71 @@ public class CallAudioService extends Service {
                 .build();
     }
 
-    private void createNotificationChannel() {
-        NotificationChannel serviceChannel = new NotificationChannel(
-                CHANNEL_ID,
-                "KavachAI Protection Service",
-                NotificationManager.IMPORTANCE_LOW);
+    private void createNotificationChannels() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+
+        manager.createNotificationChannel(new NotificationChannel(
+                CHANNEL_ID, "KavachAI Protection Service", NotificationManager.IMPORTANCE_LOW));
 
         NotificationChannel alertChannel = new NotificationChannel(
-                ALERT_CHANNEL_ID,
-                "Scam Alerts",
-                NotificationManager.IMPORTANCE_HIGH);
+                ALERT_CHANNEL_ID, "Scam Alerts", NotificationManager.IMPORTANCE_HIGH);
+        alertChannel.enableVibration(true);
+        alertChannel.enableLights(true);
+        manager.createNotificationChannel(alertChannel);
 
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.createNotificationChannel(serviceChannel);
-            manager.createNotificationChannel(alertChannel);
-        }
+        NotificationChannel warnChannel = new NotificationChannel(
+                WARNING_CHANNEL_ID, "Suspicious Call Warnings", NotificationManager.IMPORTANCE_DEFAULT);
+        warnChannel.enableVibration(true);
+        manager.createNotificationChannel(warnChannel);
+    }
+
+    private void triggerSuspiciousAlert(String transcript, String keywords, String level) {
+        Intent intent = new Intent(this, MainActivity.class);
+        PendingIntent pi = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, WARNING_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("KavachAI Warning: " + level)
+                .setContentText("Stay alert — do not share personal details on this call.")
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText("Suspicious keywords: " + keywords + "\n" + transcript))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(pi)
+                .setAutoCancel(true);
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) manager.notify(SUSPICIOUS_ALERT_ID, builder.build());
     }
 
     private void triggerScamAlert(String transcript, String keywords, String level, int riskScore) {
         Intent intent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("KavachAI Warning: " + level)
                 .setContentText("Do not share OTP, PIN, or personal details on this call.")
-                .setStyle(new NotificationCompat.BigTextStyle().bigText("Keywords: " + keywords + "\n" + transcript))
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText("Keywords: " + keywords + "\n" + transcript))
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setDefaults(Notification.DEFAULT_ALL)
-                .setContentIntent(pendingIntent)
+                .setContentIntent(pi)
                 .setAutoCancel(true)
-                .setFullScreenIntent(pendingIntent, true);
+                .setFullScreenIntent(pi, true);
 
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) {
-            manager.notify(SCAM_ALERT_ID, builder.build());
-        }
+        if (manager != null) manager.notify(SCAM_ALERT_ID, builder.build());
 
         saveAlertHistory(level, transcript, keywords, riskScore);
+
+        // Auto hang-up if enabled and confirmed scam
+        if (riskScore >= 10) {
+            SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
+            if (prefs.getBoolean("auto_hangup_enabled", true)) {
+                endActiveCall();
+            }
+        }
     }
 
     private void saveAlertHistory(String level, String transcript, String keywords, int riskScore) {
@@ -300,7 +334,7 @@ public class CallAudioService extends Service {
         String history = prefs.getString("scam_alerts_history", "[]");
 
         try {
-            JSONArray currentArray = new JSONArray(history);
+            JSONArray current = new JSONArray(history);
             JSONObject newAlert = new JSONObject();
             newAlert.put("timestamp", System.currentTimeMillis());
             newAlert.put("level", level);
@@ -308,17 +342,17 @@ public class CallAudioService extends Service {
             newAlert.put("keywords", keywords);
             newAlert.put("risk_score", Math.max(0, Math.min(riskScore, 10)));
 
-            JSONArray updatedArray = new JSONArray();
-            updatedArray.put(newAlert);
-            for (int i = 0; i < Math.min(currentArray.length(), 9); i++) {
-                updatedArray.put(currentArray.getJSONObject(i));
+            JSONArray updated = new JSONArray();
+            updated.put(newAlert);
+            for (int i = 0; i < Math.min(current.length(), 9); i++) {
+                updated.put(current.getJSONObject(i));
             }
 
-            prefs.edit().putString("scam_alerts_history", updatedArray.toString()).apply();
+            prefs.edit().putString("scam_alerts_history", updated.toString()).apply();
 
-            Intent dashboardIntent = new Intent(ACTION_NEW_SCAM_ALERT);
-            dashboardIntent.setPackage(getPackageName());
-            sendBroadcast(dashboardIntent);
+            Intent dashIntent = new Intent(ACTION_NEW_SCAM_ALERT);
+            dashIntent.setPackage(getPackageName());
+            sendBroadcast(dashIntent);
         } catch (JSONException e) {
             Log.e(TAG, "Failed to save alert history", e);
         }
@@ -344,12 +378,15 @@ public class CallAudioService extends Service {
 
     private class KavachWebSocketListener extends WebSocketListener {
         @Override
+        public void onOpen(WebSocket webSocket, Response response) {
+            Log.d(TAG, "WebSocket connected to backend");
+        }
+
+        @Override
         public void onMessage(WebSocket webSocket, String text) {
             try {
                 JSONObject json = new JSONObject(text);
-                if (!json.has("risk_score")) {
-                    return;
-                }
+                if (!json.has("risk_score")) return;
 
                 int score = json.getInt("risk_score");
                 String transcript = json.optString("transcript", "");
@@ -358,10 +395,18 @@ public class CallAudioService extends Service {
 
                 broadcastLiveUpdate(score, transcript, keywords, level);
 
+                // SUSPICIOUS / HIGH RISK notification (one-time, score 4-9)
+                if (score >= 4 && !suspiciousAlertSent && score < 10) {
+                    suspiciousAlertSent = true;
+                    triggerSuspiciousAlert(transcript, keywords, level);
+                }
+
+                // SCAM DETECTED full alert (one-time, score 10+)
                 if (score >= 7 && !scamAlertSent) {
                     scamAlertSent = true;
                     triggerScamAlert(transcript, keywords, level, score);
                 }
+
             } catch (JSONException e) {
                 Log.e(TAG, "Invalid backend payload: " + text, e);
             }
@@ -369,8 +414,13 @@ public class CallAudioService extends Service {
 
         @Override
         public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-            Log.e(TAG, "WebSocket failure", t);
+            Log.e(TAG, "WebSocket failure: " + t.getMessage());
             broadcastMonitoringState(false);
+        }
+
+        @Override
+        public void onClosed(WebSocket webSocket, int code, String reason) {
+            Log.d(TAG, "WebSocket closed: " + reason);
         }
     }
 

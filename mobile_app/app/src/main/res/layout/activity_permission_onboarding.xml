@@ -52,7 +52,7 @@
                 android:id="@+id/step_segment_1"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_segment_active" />
 
@@ -60,7 +60,7 @@
                 android:id="@+id/step_segment_2"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginHorizontal="3dp"
+                android:layout_marginHorizontal="2dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_segment_inactive" />
 
@@ -68,7 +68,15 @@
                 android:id="@+id/step_segment_3"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_marginStart="6dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_segment_inactive" />
+
+            <View
+                android:id="@+id/step_segment_4"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_segment_inactive" />
         </LinearLayout>

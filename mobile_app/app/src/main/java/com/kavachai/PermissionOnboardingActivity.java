@@ -23,7 +23,7 @@ import java.util.Map;
 
 public class PermissionOnboardingActivity extends AppCompatActivity {
 
-    private static final int TOTAL_STEPS = 3;
+    private static final int TOTAL_STEPS = 4;
 
     private int currentStep = 0;
     private ImageView ivIcon;
@@ -36,19 +36,22 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
     private final int[] stepIcons = {
             android.R.drawable.ic_menu_call,
             android.R.drawable.ic_btn_speak_now,
-            android.R.drawable.ic_dialog_info
+            android.R.drawable.ic_dialog_info,
+            android.R.drawable.ic_menu_close_clear_cancel
     };
 
     private final String[] stepTitles = {
             "Detect Calls",
             "Listen to Caller",
-            "Send Alerts"
+            "Send Alerts",
+            "Block Scam Calls"
     };
 
     private final String[] stepDescriptions = {
-            "Allow call state access so KavachAI can auto-start protection when a call begins.",
+            "Allow call state access so KavachAI can auto-start protection the moment a call begins.",
             "Allow microphone access during calls to analyze scam patterns in real time.",
-            "Allow notifications so we can warn you instantly if risk becomes high."
+            "Allow notifications so KavachAI can warn you instantly when risk is detected.",
+            "Allow KavachAI to end the call automatically when a confirmed scam is detected. You can disable this in Settings."
     };
 
     private final ActivityResultLauncher<String[]> permissionLauncher =
@@ -69,7 +72,8 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
         stepSegments = new View[]{
                 findViewById(R.id.step_segment_1),
                 findViewById(R.id.step_segment_2),
-                findViewById(R.id.step_segment_3)
+                findViewById(R.id.step_segment_3),
+                findViewById(R.id.step_segment_4)
         };
 
         updateStepUI();
@@ -100,7 +104,7 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
                         : R.drawable.bg_segment_inactive);
             }
 
-            btnPrimary.setText(currentStep == TOTAL_STEPS - 1 ? "Grant Permission" : "Next");
+            btnPrimary.setText(currentStep == TOTAL_STEPS - 1 ? "Grant All Permissions" : "Next");
             rootView.animate().alpha(1f).setDuration(120).start();
         }).start();
     }
@@ -132,12 +136,18 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            permissions.add(Manifest.permission.ANSWER_PHONE_CALLS);
+        }
         return permissions.toArray(new String[0]);
     }
 
     private void completeOnboarding() {
         SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
-        prefs.edit().putBoolean("onboarding_done", true).apply();
+        prefs.edit()
+                .putBoolean("onboarding_done", true)
+                .putBoolean("auto_hangup_enabled", true)
+                .apply();
 
         startActivity(new Intent(this, MainActivity.class));
         finish();
@@ -146,7 +156,7 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
     private void showExplanationDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("Why is this needed?")
-                .setMessage("KavachAI only analyzes call audio in real time to detect scam patterns. No call recordings are stored.")
+                .setMessage("KavachAI only analyzes call audio in real time to detect scam patterns. No recordings are stored on your device or our servers. The call-ending permission is only used when a confirmed scam is detected — and only if you enable auto-hangup in Settings.")
                 .setPositiveButton("I Understand", null)
                 .show();
     }
@@ -154,7 +164,7 @@ public class PermissionOnboardingActivity extends AppCompatActivity {
     private void showPermissionDeniedDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("Permissions Required")
-                .setMessage("KavachAI protection needs these permissions. Open app settings to enable them.")
+                .setMessage("KavachAI needs these permissions to protect you. Please open app settings and grant all permissions.")
                 .setPositiveButton("Open Settings", (dialog, which) -> {
                     Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                     Uri uri = Uri.fromParts("package", getPackageName(), null);
