@@ -188,6 +188,7 @@ public class CallAudioService extends Service {
                     JSONObject payload = new JSONObject();
                     payload.put("audio", base64Audio);
                     webSocket.send(payload.toString());
+                    chunksSent++;
                 } catch (JSONException e) {
                     Log.e(TAG, "Failed to send audio chunk", e);
                 }
@@ -277,8 +278,8 @@ public class CallAudioService extends Service {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("SCAM DETECTED")
-                .setContentText("Do not share OTP or PIN on this call.")
+                .setContentTitle("KavachAI Warning: " + level)
+                .setContentText("Do not share OTP, PIN, or personal details on this call.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText("Keywords: " + keywords + "\n" + transcript))
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setDefaults(Notification.DEFAULT_ALL)
@@ -357,7 +358,7 @@ public class CallAudioService extends Service {
 
                 broadcastLiveUpdate(score, transcript, keywords, level);
 
-                if (score >= 10 && !scamAlertSent) {
+                if (score >= 7 && !scamAlertSent) {
                     scamAlertSent = true;
                     triggerScamAlert(transcript, keywords, level, score);
                 }
