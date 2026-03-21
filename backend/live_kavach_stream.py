@@ -28,6 +28,16 @@ CHANNELS = 1
 CHUNK_SIZE = 4000  # 250ms of audio at 16kHz mono
 
 # ==============================
+# Audio configuration
+# ==============================
+
+# Keep the microphone stream aligned with the backend server/STT settings.
+SAMPLERATE = 16000
+CHANNELS = 1
+CHUNK_SIZE = 2048
+
+
+# ==============================
 # Audio streaming handler
 # ==============================
 
