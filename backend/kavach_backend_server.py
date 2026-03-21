@@ -53,7 +53,7 @@ async def handle_client(websocket):
                 # ── Send to Sarvam ──
                 await sarvam_ws.transcribe(
                     audio=b64_audio,
-                    encoding="audio/wav",
+                    encoding="pcm_s16le",
                     sample_rate=16000,
                 )
 

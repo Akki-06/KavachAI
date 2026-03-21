@@ -23,6 +23,9 @@ if not SARVAM_API_KEY:
 
 from scam_engine import analyze_transcript
 
+SAMPLERATE = 16000
+CHANNELS = 1
+CHUNK_SIZE = 4000  # 250ms of audio at 16kHz mono
 
 # ==============================
 # Audio streaming handler
@@ -82,7 +85,7 @@ async def stream_audio():
 
                 await ws.transcribe(
                     audio=b64_chunk,
-                    encoding="audio/wav",
+                    encoding="pcm_s16le",
                     sample_rate=SAMPLERATE,
                 )
 
