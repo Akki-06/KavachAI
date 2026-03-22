@@ -13,6 +13,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
 import android.view.View;
@@ -60,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private AlertAdapter alertAdapter;
     private View historyLabelRow;
+    private boolean backendConnected = false;
 
     // ── Stats tab views ──
     private View statsContent;
@@ -105,7 +108,8 @@ public class MainActivity extends AppCompatActivity {
             if (CallAudioService.ACTION_MONITORING_STATE.equals(action)) {
                 boolean active = intent.getBooleanExtra(CallAudioService.EXTRA_MONITORING_ACTIVE, false);
                 long startMs = intent.getLongExtra(CallAudioService.EXTRA_CALL_START_MS, System.currentTimeMillis());
-                updateMonitoringState(active, startMs);
+                String phone = intent.getStringExtra(CallAudioService.EXTRA_PHONE_NUMBER);
+                updateMonitoringState(active, startMs, phone == null ? "" : phone);
             } else if (CallAudioService.ACTION_LIVE_UPDATE.equals(action)) {
                 int score = intent.getIntExtra(CallAudioService.EXTRA_RISK_SCORE, 0);
                 String level = intent.getStringExtra(CallAudioService.EXTRA_ALERT_LEVEL);
@@ -115,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
                         level == null ? "SAFE" : level,
                         transcript == null ? "" : transcript,
                         keywords == null ? "" : keywords);
+            } else if (CallAudioService.ACTION_BACKEND_STATUS.equals(action)) {
+                backendConnected = intent.getBooleanExtra(CallAudioService.EXTRA_BACKEND_CONNECTED, false);
+                updateBackendIndicator();
             }
         }
     };
@@ -353,6 +360,7 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter liveFilter = new IntentFilter();
         liveFilter.addAction(CallAudioService.ACTION_LIVE_UPDATE);
         liveFilter.addAction(CallAudioService.ACTION_MONITORING_STATE);
+        liveFilter.addAction(CallAudioService.ACTION_BACKEND_STATUS);
         ContextCompat.registerReceiver(this, liveUpdateReceiver, liveFilter,
                 ContextCompat.RECEIVER_NOT_EXPORTED);
 
