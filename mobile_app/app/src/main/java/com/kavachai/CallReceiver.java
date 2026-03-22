@@ -24,16 +24,12 @@ public class CallReceiver extends BroadcastReceiver {
         if (stateStr == null) return;
 
         int state;
-        switch (stateStr) {
-            case TelephonyManager.EXTRA_STATE_RINGING:
-                state = TelephonyManager.CALL_STATE_RINGING;
-                break;
-            case TelephonyManager.EXTRA_STATE_OFFHOOK:
-                state = TelephonyManager.CALL_STATE_OFFHOOK;
-                break;
-            default:
-                state = TelephonyManager.CALL_STATE_IDLE;
-                break;
+        if (TelephonyManager.EXTRA_STATE_RINGING.equals(stateStr)) {
+            state = TelephonyManager.CALL_STATE_RINGING;
+        } else if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(stateStr)) {
+            state = TelephonyManager.CALL_STATE_OFFHOOK;
+        } else {
+            state = TelephonyManager.CALL_STATE_IDLE;
         }
 
         // Capture incoming phone number (available on RINGING state)

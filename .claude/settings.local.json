@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug)",
+      "Bash(java -version)",
+      "Read(//c/Users/akki2/OneDrive/Desktop/Lets Do this/KavachAI/$PROGRAMFILES/**)",
+      "Read(//c/Users/akki2/OneDrive/Desktop/Lets Do this/KavachAI/$PROGRAMFILES/Android/Android Studio/jbr/bin/**)",
+      "Read(//c/Users/akki2/OneDrive/Desktop/Lets Do this/KavachAI/$PROGRAMFILES/Android/Android Studio/jre/bin/**)",
+      "Read(//c/Users/akki2/OneDrive/Desktop/Lets Do this/KavachAI/$LOCALAPPDATA/Android/**)",
+      "Bash(./gradlew clean:*)",
+      "Bash(ADB=\"$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe\")",
+      "Bash(\"$ADB\" install:*)",
+      "Bash(\"$ADB\" logcat:*)"
+    ]
+  }
+}

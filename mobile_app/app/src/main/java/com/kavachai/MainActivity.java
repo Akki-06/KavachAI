@@ -515,6 +515,14 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void updateBackendIndicator() {
+        if (backendConnected) {
+            tvStatusSubtitle.setText("Monitoring all incoming & outgoing calls");
+        } else {
+            tvStatusSubtitle.setText("Backend disconnected — calls still monitored locally");
+        }
+    }
+
     private void updateMonitoringState(boolean active, long startMs, String phoneNumber) {
         isMonitoringActive = active;
         if (active) {

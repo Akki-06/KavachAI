@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Required on Android 12+ to start foreground service from background on call events -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Allows starting service even when app is not open -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <!-- Re-register receiver after device reboot -->

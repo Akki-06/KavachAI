@@ -128,8 +128,6 @@ async def handle_client(websocket):
                 # ── Send to Sarvam ────────────────────────────────────────
                 await sarvam_ws.transcribe(
                     audio=data["audio"],
-                    encoding="pcm_s16le",
-                    sample_rate=16000,
                 )
 
                 # ── Non-blocking receive (0.1s timeout) ───────────────────

@@ -6,6 +6,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.pm.ServiceInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -112,7 +113,23 @@ public class CallAudioService extends Service {
             callerNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER);
             if (callerNumber == null) callerNumber = "";
 
-            startForeground(NOTIFICATION_ID, buildActiveNotification());
+            // On Android 14+ (API 34), starting FGS with microphone type from a
+            // BroadcastReceiver can fail if the app isn't in an "eligible state".
+            // Fall back to phoneCall type only — AudioRecord still works with
+            // the RECORD_AUDIO runtime permission granted.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    startForeground(NOTIFICATION_ID, buildActiveNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                                    | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+                } catch (SecurityException e) {
+                    Log.w(TAG, "Microphone FGS type blocked, falling back to phoneCall only", e);
+                    startForeground(NOTIFICATION_ID, buildActiveNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+                }
+            } else {
+                startForeground(NOTIFICATION_ID, buildActiveNotification());
+            }
             startAudioCaptureAndStreaming();
             incrementCallsMonitored();
             broadcastMonitoringState(true);
@@ -139,7 +156,8 @@ public class CallAudioService extends Service {
 
         AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (am != null) {
-            am.setMode(AudioManager.MODE_IN_CALL);
+            // MODE_IN_COMMUNICATION works for regular apps; MODE_IN_CALL needs system perms on MIUI
+            am.setMode(AudioManager.MODE_IN_COMMUNICATION);
             am.setSpeakerphoneOn(true);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 for (AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
@@ -149,6 +167,7 @@ public class CallAudioService extends Service {
                     }
                 }
             }
+            Log.d(TAG, "Audio mode set to IN_COMMUNICATION, speaker=" + am.isSpeakerphoneOn());
         }
 
         // Read backend URL from prefs, fall back to BuildConfig then hardcoded default
@@ -181,17 +200,18 @@ public class CallAudioService extends Service {
 
     /**
      * Audio source priority order:
-     *  1. VOICE_CALL      — captures both parties directly; requires CAPTURE_AUDIO_OUTPUT
-     *                       (system/privileged apps only). Silently fails on stock Android.
-     *  2. UNPROCESSED     — raw mic; on some devices (Pixel, select OEMs) captures both sides
-     *                       when phone speaker is near the mic, without forcing speakerphone.
-     *  3. VOICE_RECOGNITION (fallback) — standard mic; works universally but only hears both
-     *                       parties when the app forces speakerphone on.
+     *  1. VOICE_CALL           — captures both parties directly; requires CAPTURE_AUDIO_OUTPUT
+     *                            (system/privileged apps only). Silently fails on stock Android.
+     *  2. MIC                  — standard microphone; works on most devices during calls when
+     *                            speakerphone is enabled. Best option for non-system apps.
+     *  3. VOICE_COMMUNICATION  — VoIP-style capture; some OEMs allow it during telephony calls.
+     *  4. VOICE_RECOGNITION    — similar to MIC but with different processing pipeline.
      */
     private static final int[] AUDIO_SOURCE_PRIORITY = {
-            MediaRecorder.AudioSource.VOICE_CALL,        // API 1 — system app only
-            MediaRecorder.AudioSource.UNPROCESSED,       // API 24 — raw mic, no AGC/NS
-            MediaRecorder.AudioSource.VOICE_RECOGNITION, // API 1 — universal fallback
+            MediaRecorder.AudioSource.VOICE_CALL,           // API 1 — system app only
+            MediaRecorder.AudioSource.MIC,                  // API 1 — works with speakerphone
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,  // API 1 — VoIP style
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,    // API 1 — universal fallback
     };
 
     @SuppressWarnings("MissingPermission")
@@ -241,9 +261,10 @@ public class CallAudioService extends Service {
             return;
         }
 
-        // If we had to fall back to VOICE_RECOGNITION the speakerphone is already on (set in
-        // startAudioCaptureAndStreaming). Inform the user so they are not surprised.
-        if (usedSource == MediaRecorder.AudioSource.VOICE_RECOGNITION) {
+        // If using mic-based source, speakerphone is already on. Inform the user.
+        if (usedSource == MediaRecorder.AudioSource.MIC
+                || usedSource == MediaRecorder.AudioSource.VOICE_COMMUNICATION
+                || usedSource == MediaRecorder.AudioSource.VOICE_RECOGNITION) {
             mainHandler.post(() ->
                     Toast.makeText(getApplicationContext(),
                             "KavachAI: Speakerphone enabled for call monitoring",
