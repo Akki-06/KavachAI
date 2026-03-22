@@ -403,6 +403,7 @@ public class MainActivity extends AppCompatActivity {
             statusCard.setStrokeColor(ContextCompat.getColor(this, R.color.kavach_safe));
             btnActivate.setVisibility(View.GONE);
             requestBatteryOptimizationExemption();
+            promptDefaultDialerIfNeeded();
         } else {
             tvStatusTitle.setText("NOT PROTECTED");
             tvStatusTitle.setTextColor(ContextCompat.getColor(this, R.color.kavach_scam));
@@ -448,6 +449,39 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Later", (d, w) ->
                         prefs.edit().putBoolean("battery_opt_requested", true).apply())
+                .show();
+    }
+
+    /**
+     * Suggests setting KavachAI as the default phone app (once per install).
+     * As the default dialer, the InCallService gets privileged Telecom access which
+     * may enable VOICE_CALL audio capture on some OEM devices (Samsung, OnePlus, etc.),
+     * eliminating the need to force speakerphone on during calls.
+     * This is purely optional — KavachAI works without it via the companion InCallService.
+     */
+    private void promptDefaultDialerIfNeeded() {
+        SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
+        if (prefs.getBoolean("default_dialer_prompted", false)) return;
+
+        TelecomManager tm = (TelecomManager) getSystemService(TELECOM_SERVICE);
+        if (tm == null) return;
+        if (getPackageName().equals(tm.getDefaultDialerPackage())) return; // already default
+
+        prefs.edit().putBoolean("default_dialer_prompted", true).apply();
+
+        new AlertDialog.Builder(this)
+                .setTitle("Improve Audio Quality (Optional)")
+                .setMessage("Set KavachAI as your default phone app to enable direct call " +
+                        "audio capture — no speakerphone required.\n\n" +
+                        "Your existing phone app continues to handle your dialer UI. " +
+                        "You can revert this anytime in System Settings → Default Apps.")
+                .setPositiveButton("Set as Default", (d, w) -> {
+                    Intent intent = new Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER);
+                    intent.putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,
+                            getPackageName());
+                    startActivity(intent);
+                })
+                .setNegativeButton("Skip", null)
                 .show();
     }
 

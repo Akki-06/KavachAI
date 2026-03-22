@@ -106,6 +106,11 @@ public class CallAudioService extends Service {
 
         String action = intent.getAction();
         if ("START_CAPTURE".equals(action)) {
+            // Guard against duplicate starts from both CallReceiver and KavachInCallService
+            if (isRecording.get()) {
+                Log.d(TAG, "Already recording — ignoring duplicate START_CAPTURE");
+                return START_REDELIVER_INTENT;
+            }
             sessionStartMs = System.currentTimeMillis();
             scamAlertSent = false;
             suspiciousAlertSent = false;

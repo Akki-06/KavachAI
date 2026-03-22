@@ -21,6 +21,8 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <!-- Request battery optimization exemption so CallReceiver fires on OEM Androids -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Required for companion InCallService on Android 12+ (API 31+, normal protection level) -->
+    <uses-permission android:name="android.permission.MANAGE_ONGOING_CALLS" />
 
     <application
         android:networkSecurityConfig="@xml/network_security_config"
@@ -83,6 +85,26 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone|phoneCall" />
+
+        <!-- Companion InCallService — receives reliable call lifecycle callbacks directly
+             from Android Telecom framework, bypassing OEM broadcast-blocking completely.
+             IN_CALL_SERVICE_UI=false means we don't replace the user's phone app UI.
+             On API 31+ requires MANAGE_ONGOING_CALLS; on API 26-30 the PHONE_STATE
+             receiver acts as fallback. -->
+        <service
+            android:name=".KavachInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="false" />
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="false" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
 
         <!-- Persistent watchdog — keeps process alive on OEM Androids so
              CallReceiver fires immediately when any call comes in -->
