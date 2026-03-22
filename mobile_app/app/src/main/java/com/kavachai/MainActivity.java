@@ -13,6 +13,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
 import android.view.View;
@@ -60,6 +63,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private AlertAdapter alertAdapter;
     private View historyLabelRow;
+    private boolean backendConnected = false;
 
     // ── Stats tab views ──
     private View statsContent;
@@ -105,7 +109,8 @@ public class MainActivity extends AppCompatActivity {
             if (CallAudioService.ACTION_MONITORING_STATE.equals(action)) {
                 boolean active = intent.getBooleanExtra(CallAudioService.EXTRA_MONITORING_ACTIVE, false);
                 long startMs = intent.getLongExtra(CallAudioService.EXTRA_CALL_START_MS, System.currentTimeMillis());
-                updateMonitoringState(active, startMs);
+                String phone = intent.getStringExtra(CallAudioService.EXTRA_PHONE_NUMBER);
+                updateMonitoringState(active, startMs, phone == null ? "" : phone);
             } else if (CallAudioService.ACTION_LIVE_UPDATE.equals(action)) {
                 int score = intent.getIntExtra(CallAudioService.EXTRA_RISK_SCORE, 0);
                 String level = intent.getStringExtra(CallAudioService.EXTRA_ALERT_LEVEL);
@@ -115,6 +120,9 @@ public class MainActivity extends AppCompatActivity {
                         level == null ? "SAFE" : level,
                         transcript == null ? "" : transcript,
                         keywords == null ? "" : keywords);
+            } else if (CallAudioService.ACTION_BACKEND_STATUS.equals(action)) {
+                backendConnected = intent.getBooleanExtra(CallAudioService.EXTRA_BACKEND_CONNECTED, false);
+                updateBackendIndicator();
             }
         }
     };
@@ -141,6 +149,17 @@ public class MainActivity extends AppCompatActivity {
         loadAlertHistory();
         registerAppReceivers();
         loadSettings();
+        startWatchdog();
+    }
+
+    /** Starts the persistent watchdog service that keeps the process alive between calls. */
+    private void startWatchdog() {
+        Intent watchdog = new Intent(this, KavachWatchdogService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(watchdog);
+        } else {
+            startService(watchdog);
+        }
     }
 
     @Override
@@ -353,6 +372,7 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter liveFilter = new IntentFilter();
         liveFilter.addAction(CallAudioService.ACTION_LIVE_UPDATE);
         liveFilter.addAction(CallAudioService.ACTION_MONITORING_STATE);
+        liveFilter.addAction(CallAudioService.ACTION_BACKEND_STATUS);
         ContextCompat.registerReceiver(this, liveUpdateReceiver, liveFilter,
                 ContextCompat.RECEIVER_NOT_EXPORTED);
 
@@ -382,6 +402,7 @@ public class MainActivity extends AppCompatActivity {
             statusCard.setCardBackgroundColor(ContextCompat.getColor(this, R.color.kavach_card_safe_tint));
             statusCard.setStrokeColor(ContextCompat.getColor(this, R.color.kavach_safe));
             btnActivate.setVisibility(View.GONE);
+            requestBatteryOptimizationExemption();
         } else {
             tvStatusTitle.setText("NOT PROTECTED");
             tvStatusTitle.setTextColor(ContextCompat.getColor(this, R.color.kavach_scam));
@@ -390,6 +411,44 @@ public class MainActivity extends AppCompatActivity {
             statusCard.setStrokeColor(ContextCompat.getColor(this, R.color.kavach_scam));
             btnActivate.setVisibility(View.VISIBLE);
         }
+    }
+
+    /**
+     * Asks Android to exempt KavachAI from battery optimization.
+     * Without this, OEM battery savers (Xiaomi MIUI, Samsung, Oppo, Vivo) kill the
+     * background process and PHONE_STATE broadcasts are never delivered.
+     * Only prompts once per install — stored in SharedPreferences.
+     */
+    private void requestBatteryOptimizationExemption() {
+        SharedPreferences prefs = getSharedPreferences("KavachAIPrefs", MODE_PRIVATE);
+        if (prefs.getBoolean("battery_opt_requested", false)) return;
+
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return;
+        if (pm.isIgnoringBatteryOptimizations(getPackageName())) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Allow Background Monitoring")
+                .setMessage("KavachAI needs to run in the background to detect scam calls even " +
+                        "when you are not using the app.\n\n" +
+                        "On the next screen, select \"All apps\" → find KavachAI → " +
+                        "set to \"Don't optimize\".\n\n" +
+                        "Some phones (Xiaomi, Samsung, Oppo, Vivo) also have a separate " +
+                        "\"Autostart\" or \"Background Activity\" setting — please enable it too.")
+                .setPositiveButton("Open Settings", (d, w) -> {
+                    prefs.edit().putBoolean("battery_opt_requested", true).apply();
+                    try {
+                        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        i.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(i);
+                    } catch (Exception e) {
+                        // Fallback to general battery settings if direct intent is blocked
+                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    }
+                })
+                .setNegativeButton("Later", (d, w) ->
+                        prefs.edit().putBoolean("battery_opt_requested", true).apply())
+                .show();
     }
 
     private void loadAlertHistory() {
@@ -456,7 +515,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void updateMonitoringState(boolean active, long startMs) {
+    private void updateMonitoringState(boolean active, long startMs, String phoneNumber) {
         isMonitoringActive = active;
         if (active) {
             callStartMs = startMs > 0L ? startMs : System.currentTimeMillis();

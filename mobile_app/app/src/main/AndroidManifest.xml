@@ -18,10 +18,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- End/answer calls programmatically (used to hang up scam calls) -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <!-- Request battery optimization exemption so CallReceiver fires on OEM Androids -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-        android:usesCleartextTraffic="true"
-        android:allowBackup="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -53,12 +55,23 @@
             android:exported="false"
             android:theme="@style/Theme.KavachAI" />
 
-        <!-- Phone State Listener — high priority for reliable background delivery -->
+        <!-- Phone State Listener — exported=false: PHONE_STATE is a protected system broadcast,
+             so system still delivers it; other apps cannot send fake broadcasts to this receiver -->
         <receiver
             android:name=".CallReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter android:priority="999">
                 <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Re-registers CallReceiver after device reboot -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
@@ -69,6 +82,15 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone|phoneCall" />
+
+        <!-- Persistent watchdog — keeps process alive on OEM Androids so
+             CallReceiver fires immediately when any call comes in -->
+        <service
+            android:name=".KavachWatchdogService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false" />
 
     </application>
 

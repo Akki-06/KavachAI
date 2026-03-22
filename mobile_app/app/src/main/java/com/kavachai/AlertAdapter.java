@@ -1,12 +1,13 @@
 package com.kavachai;
 
-import android.graphics.Color;
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.card.MaterialCardView;
@@ -18,11 +19,13 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHolder> {
 
     private JSONArray alertsArray = new JSONArray();
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault());
+    private final SimpleDateFormat dateFormat =
+            new SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault());
 
     public void setAlerts(JSONArray alerts) {
         this.alertsArray = alerts == null ? new JSONArray() : alerts;
@@ -32,7 +35,8 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
     @NonNull
     @Override
     public AlertViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_alert, parent, false);
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.item_alert, parent, false);
         return new AlertViewHolder(view);
     }
 
@@ -40,9 +44,12 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
     public void onBindViewHolder(@NonNull AlertViewHolder holder, int position) {
         try {
             JSONObject alert = alertsArray.getJSONObject(position);
-            String level = sanitizeLevel(alert.optString("level", "SCAM DETECTED"));
-            int levelColor = getLevelColor(level);
-            int riskScore = normalizeRiskScore(alert.optInt("risk_score", inferScoreFromLevel(level)));
+            Context ctx = holder.itemView.getContext();
+
+            String level    = sanitizeLevel(alert.optString("level", "SCAM DETECTED"));
+            int levelColor  = getLevelColor(ctx, level);
+            int riskScore   = normalizeRiskScore(
+                    alert.optInt("risk_score", inferScoreFromLevel(level)));
 
             holder.tvLevel.setText(level);
             holder.tvLevel.setTextColor(levelColor);
@@ -50,7 +57,7 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
             holder.tvRiskScore.setTextColor(levelColor);
             holder.riskStrip.setBackgroundColor(levelColor);
 
-            String transcript = alert.optString("transcript", "No transcript available");
+            String transcript = alert.optString("transcript", "No transcript available.");
             holder.tvTranscript.setText(transcript);
 
             String words = alert.optString("keywords", "").trim();
@@ -62,9 +69,31 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
             }
 
             long timestamp = alert.optLong("timestamp", System.currentTimeMillis());
-            holder.tvTime.setText(dateFormat.format(new Date(timestamp)));
+            String timeStr = dateFormat.format(new Date(timestamp));
 
-            ((MaterialCardView) holder.itemView).setStrokeColor(Color.parseColor("#1F1F30"));
+            // Show caller number if available
+            String phone = alert.optString("phone_number", "").trim();
+            if (!phone.isEmpty()) {
+                holder.tvTime.setText(phone + "  •  " + timeStr);
+            } else {
+                holder.tvTime.setText(timeStr);
+            }
+
+            // Show call duration if available
+            long durationMs = alert.optLong("duration_ms", 0L);
+            if (durationMs > 0 && holder.tvDuration != null) {
+                long mins = TimeUnit.MILLISECONDS.toMinutes(durationMs);
+                long secs = TimeUnit.MILLISECONDS.toSeconds(durationMs) % 60;
+                holder.tvDuration.setVisibility(View.VISIBLE);
+                holder.tvDuration.setText(
+                        String.format(Locale.getDefault(), "Duration: %dm %02ds", mins, secs));
+            } else if (holder.tvDuration != null) {
+                holder.tvDuration.setVisibility(View.GONE);
+            }
+
+            ((MaterialCardView) holder.itemView)
+                    .setStrokeColor(ContextCompat.getColor(ctx, R.color.kavach_border));
+
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -78,32 +107,23 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
     private String sanitizeLevel(String rawLevel) {
         String level = rawLevel == null ? "" : rawLevel;
         level = level.replaceAll("\\u001B\\[[;\\d]*m", "").trim();
-        if (level.isEmpty()) {
-            return "SCAM DETECTED";
-        }
-        return level.toUpperCase(Locale.getDefault());
+        return level.isEmpty() ? "SCAM DETECTED" : level.toUpperCase(Locale.getDefault());
     }
 
-    private int getLevelColor(String level) {
+    private int getLevelColor(Context ctx, String level) {
         if (level.contains("SAFE")) {
-            return Color.parseColor("#00D68F");
+            return ContextCompat.getColor(ctx, R.color.kavach_safe);
         }
-        if (level.contains("SUSPICIOUS") || level.contains("HIGH RISK") || level.contains("WARNING")) {
-            return Color.parseColor("#FFB547");
+        if (level.contains("SUSPICIOUS") || level.contains("HIGH RISK")) {
+            return ContextCompat.getColor(ctx, R.color.kavach_warning);
         }
-        return Color.parseColor("#FF2442");
+        return ContextCompat.getColor(ctx, R.color.kavach_scam);
     }
 
     private int inferScoreFromLevel(String level) {
-        if (level.contains("SAFE")) {
-            return 2;
-        }
-        if (level.contains("SUSPICIOUS")) {
-            return 5;
-        }
-        if (level.contains("HIGH RISK")) {
-            return 8;
-        }
+        if (level.contains("SAFE"))        return 2;
+        if (level.contains("SUSPICIOUS"))  return 5;
+        if (level.contains("HIGH RISK"))   return 8;
         return 10;
     }
 
@@ -113,20 +133,17 @@ public class AlertAdapter extends RecyclerView.Adapter<AlertAdapter.AlertViewHol
 
     static class AlertViewHolder extends RecyclerView.ViewHolder {
         View riskStrip;
-        TextView tvLevel;
-        TextView tvTime;
-        TextView tvTranscript;
-        TextView tvKeywords;
-        TextView tvRiskScore;
+        TextView tvLevel, tvTime, tvTranscript, tvKeywords, tvRiskScore, tvDuration;
 
         AlertViewHolder(@NonNull View itemView) {
             super(itemView);
-            riskStrip = itemView.findViewById(R.id.view_risk_strip);
-            tvLevel = itemView.findViewById(R.id.tv_alert_level);
-            tvTime = itemView.findViewById(R.id.tv_alert_time);
+            riskStrip    = itemView.findViewById(R.id.view_risk_strip);
+            tvLevel      = itemView.findViewById(R.id.tv_alert_level);
+            tvTime       = itemView.findViewById(R.id.tv_alert_time);
             tvTranscript = itemView.findViewById(R.id.tv_transcript);
-            tvKeywords = itemView.findViewById(R.id.tv_keywords);
-            tvRiskScore = itemView.findViewById(R.id.tv_risk_score);
+            tvKeywords   = itemView.findViewById(R.id.tv_keywords);
+            tvRiskScore  = itemView.findViewById(R.id.tv_risk_score);
+            tvDuration   = itemView.findViewById(R.id.tv_duration);
         }
     }
 }

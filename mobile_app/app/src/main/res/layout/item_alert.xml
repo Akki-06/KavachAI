@@ -76,10 +76,23 @@
             android:text="Keywords: otp, block"
             android:textColor="@color/kavach_muted"
             android:textSize="12sp"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/tv_risk_score"
             app:layout_constraintStart_toStartOf="@+id/tv_alert_level"
             app:layout_constraintTop_toBottomOf="@+id/tv_transcript" />
+
+        <TextView
+            android:id="@+id/tv_duration"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Duration: 0m 00s"
+            android:textColor="@color/kavach_muted"
+            android:textSize="11sp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/tv_risk_score"
+            app:layout_constraintStart_toStartOf="@+id/tv_alert_level"
+            app:layout_constraintTop_toBottomOf="@+id/tv_keywords" />
 
         <TextView
             android:id="@+id/tv_risk_score"
