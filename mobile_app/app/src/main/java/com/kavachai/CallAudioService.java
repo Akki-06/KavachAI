@@ -22,6 +22,7 @@ import android.os.Looper;
 import android.telecom.TelecomManager;
 import android.util.Base64;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -178,6 +179,21 @@ public class CallAudioService extends Service {
         broadcastBackendStatus(false);
     }
 
+    /**
+     * Audio source priority order:
+     *  1. VOICE_CALL      — captures both parties directly; requires CAPTURE_AUDIO_OUTPUT
+     *                       (system/privileged apps only). Silently fails on stock Android.
+     *  2. UNPROCESSED     — raw mic; on some devices (Pixel, select OEMs) captures both sides
+     *                       when phone speaker is near the mic, without forcing speakerphone.
+     *  3. VOICE_RECOGNITION (fallback) — standard mic; works universally but only hears both
+     *                       parties when the app forces speakerphone on.
+     */
+    private static final int[] AUDIO_SOURCE_PRIORITY = {
+            MediaRecorder.AudioSource.VOICE_CALL,        // API 1 — system app only
+            MediaRecorder.AudioSource.UNPROCESSED,       // API 24 — raw mic, no AGC/NS
+            MediaRecorder.AudioSource.VOICE_RECOGNITION, // API 1 — universal fallback
+    };
+
     @SuppressWarnings("MissingPermission")
     private void initAndStartRecording() {
         // Re-check permission in case it was revoked
@@ -193,20 +209,53 @@ public class CallAudioService extends Service {
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
         int bufSize = Math.max(minBuf, CHUNK_BYTES * 2);
 
-        try {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, bufSize);
-        } catch (Exception e) {
-            Log.e(TAG, "AudioRecord init failed: " + e.getMessage());
+        // Try audio sources in priority order
+        int usedSource = -1;
+        for (int source : AUDIO_SOURCE_PRIORITY) {
+            // UNPROCESSED requires API 24
+            if (source == MediaRecorder.AudioSource.UNPROCESSED
+                    && Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                continue;
+            }
+            try {
+                AudioRecord candidate = new AudioRecord(source, SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize);
+                if (candidate.getState() == AudioRecord.STATE_INITIALIZED) {
+                    audioRecord = candidate;
+                    usedSource = source;
+                    Log.d(TAG, "AudioRecord initialised with source=" + source);
+                    break;
+                } else {
+                    candidate.release();
+                }
+            } catch (SecurityException se) {
+                // VOICE_CALL rejected on non-system apps — expected, try next
+                Log.d(TAG, "AudioSource " + source + " denied (not a system app): " + se.getMessage());
+            } catch (Exception e) {
+                Log.w(TAG, "AudioSource " + source + " failed: " + e.getMessage());
+            }
+        }
+
+        if (audioRecord == null) {
+            Log.e(TAG, "All audio sources failed — cannot record");
             return;
         }
 
-        if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "AudioRecord not initialized");
-            audioRecord.release();
-            audioRecord = null;
-            return;
+        // If we had to fall back to VOICE_RECOGNITION the speakerphone is already on (set in
+        // startAudioCaptureAndStreaming). Inform the user so they are not surprised.
+        if (usedSource == MediaRecorder.AudioSource.VOICE_RECOGNITION) {
+            mainHandler.post(() ->
+                    Toast.makeText(getApplicationContext(),
+                            "KavachAI: Speakerphone enabled for call monitoring",
+                            Toast.LENGTH_SHORT).show());
+        } else if (usedSource == MediaRecorder.AudioSource.VOICE_CALL) {
+            // System app path — speakerphone not needed, turn it back off
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) am.setSpeakerphoneOn(false);
+            mainHandler.post(() ->
+                    Toast.makeText(getApplicationContext(),
+                            "KavachAI: Monitoring call audio directly",
+                            Toast.LENGTH_SHORT).show());
         }
 
         audioRecord.startRecording();
